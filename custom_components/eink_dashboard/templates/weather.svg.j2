@@ -33,8 +33,8 @@
 {%- if hi_text -%}
 <text
   x="{{ hilo_right }}" y="{{ hi_y }}"
-  font-family="{{ font_sm | font_family(font_family_name) }}"
-  font-size="{{ font_sm | font_px }}"
+  font-family="{{ font_md | font_family(font_family_name) }}"
+  font-size="{{ font_md | font_px }}"
   font-weight="{{ detail_font_weight }}"
   text-anchor="end"
   dominant-baseline="hanging"
@@ -43,8 +43,8 @@
 {%- if lo_text -%}
 <text
   x="{{ hilo_right }}" y="{{ lo_y }}"
-  font-family="{{ font_sm | font_family(font_family_name) }}"
-  font-size="{{ font_sm | font_px }}"
+  font-family="{{ font_md | font_family(font_family_name) }}"
+  font-size="{{ font_md | font_px }}"
   font-weight="{{ detail_font_weight }}"
   text-anchor="end"
   dominant-baseline="hanging"
@@ -130,28 +130,39 @@
 {%- if has_forecast -%}
 {%- if show_current -%}
 <line class="eink-divider"
-  x1="{{ sep_x1 }}" y1="{{ sep_y }}"
-  x2="{{ sep_x2 }}" y2="{{ sep_y }}"
+  x1="{{ sep_x1 }}" y1="{{ sep_y + 0.5 }}"
+  x2="{{ sep_x2 }}" y2="{{ sep_y + 0.5 }}"
   stroke="{{ hex_light_gray }}"
   stroke-width="{{ sep_thickness }}"/>
 {%- endif -%}
+{%- for cx in col_dividers -%}
+<line class="eink-divider"
+  x1="{{ cx + 0.5 }}" y1="{{ col_div_y1 }}"
+  x2="{{ cx + 0.5 }}" y2="{{ col_div_y2 }}"
+  stroke="{{ hex_light_gray }}"
+  stroke-width="1"/>
+{%- endfor -%}
+{# Day labels lead each column: black and one step heavier than the
+   detail weight, so hierarchy reads without relying on gray. #}
+{%- set label_weight = "bold" if detail_font_weight == "bold"
+    else "500" -%}
 {%- for day in forecast_entries -%}
 <text
   x="{{ day.cx }}" y="{{ day.label_y }}"
   font-family="{{ font_sm | font_family(font_family_name) }}"
   font-size="{{ font_sm | font_px }}"
-  font-weight="{{ detail_font_weight }}"
+  font-weight="{{ label_weight }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="{{ hex_gray }}">{{ day.label }}</text>
+  fill="{{ hex_black }}">{{ day.label }}</text>
 {%- if day.icon_svg -%}
 <g transform="translate({{ day.icon_x }}, {{ day.icon_y }})">{{ day.icon_svg }}</g>
 {%- endif -%}
 {%- if day.hi -%}
 <text
   x="{{ day.cx }}" y="{{ day.hi_y }}"
-  font-family="{{ font_sm | font_family(font_family_name) }}"
-  font-size="{{ font_sm | font_px }}"
+  font-family="{{ font_md | font_family(font_family_name) }}"
+  font-size="{{ font_md | font_px }}"
   font-weight="{{ detail_font_weight }}"
   text-anchor="middle"
   dominant-baseline="hanging"

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 import markupsafe
@@ -64,23 +65,24 @@ _WX_NATURAL_W = 380  # natural card width
 _WX_NATURAL_W_CURRENT = 460
 _WX_ICON = 80  # condition icon diameter
 _WX_FONT_XL = 64  # temperature font size (bold)
-_WX_FONT_SM = 16  # hi/lo, detail, and forecast font
+_WX_FONT_MD = 20  # today hi/lo and forecast high temperature
+_WX_FONT_SM = 16  # detail, forecast label and low temperature font
 _WX_FONT_XS = 14  # precipitation text font
 _WX_ICON_R_PAD = 16  # gap: condition icon → temp text
-_WX_DETAIL_GAP = 2  # vertical gap above detail row
+_WX_DETAIL_GAP = 2  # vertical gap between "current" mode lines
+_WX_DETAIL_TOP_GAP = 12  # breathing room: row 1 → detail row
+_WX_HILO_GAP = 2  # vertical gap between today hi, lo and precip
 _WX_DETAIL_ICON_H = 20  # detail icon height
 _WX_ICON_GAP = 4  # gap: detail icon → its text
-_WX_SEP_GAP = 8  # gap above/below separator line
-_WX_FC_ZONE_H = 88  # forecast zone height
+_WX_SEP_GAP = 14  # gap above/below separator line
+_WX_FC_ZONE_H = 112  # forecast zone height
 _WX_PRECIP_H = _WX_FONT_SM  # line height matches font
-_WX_FC_ICON = 32  # forecast day icon diameter
-_WX_FC_ICON_CY = 34  # forecast icon centre Y offset
-_WX_FC_HI_Y = 52  # forecast hi-temp text Y offset
-_WX_FC_LO_Y = 70  # forecast lo-temp text Y offset
+_WX_FC_ICON = 40  # forecast day icon diameter
+_WX_FC_ICON_CY = 44  # forecast icon centre Y offset
+_WX_FC_HI_Y = 70  # forecast hi-temp text Y offset
+_WX_FC_LO_Y = 92  # forecast lo-temp text Y offset
 _WX_FC_PRECIP_Y = _WX_FC_ZONE_H  # precip text at zone bottom
 _WX_MIN_FC_COLS = 5  # minimum forecast column count
-_WX_LO_Y_FRAC = 0.4  # lo temp Y as fraction of temp_h
-_WX_PRECIP_Y_FRAC = 0.72  # precip text Y as fraction of temp_h
 _WX_BAR_H = 24  # today min/max gradient bar height
 _WX_BAR_LABEL_W_LEFT = 70  # left text reserve: day abbrev + lo temp
 _WX_BAR_LABEL_W_RIGHT = 50  # right text reserve: hi temp
@@ -149,7 +151,7 @@ def _resolve_sensor_override(
 def _cap_weather_font_xl(
     font_xl_size: int,
     font_xl: Any,
-    font_sm: Any,
+    font_md: Any,
     font_xs: Any,
     temp_text: str,
     avail: int,
@@ -168,7 +170,7 @@ def _cap_weather_font_xl(
         font_xl_size: Nominal xl font size in pixels.
         font_xl: PIL font loaded at font_xl_size (for text
             measurement).
-        font_sm: PIL font for hi/lo text measurement.
+        font_md: PIL font for hi/lo text measurement.
         font_xs: PIL font for precipitation text measurement.
         temp_text: Formatted temperature string (e.g. "13.8°C").
         avail: Pixel budget between temp_x and the hi/lo column.
@@ -182,9 +184,9 @@ def _cap_weather_font_xl(
     """
     hilo_w = 0
     if today_hi:
-        hilo_w = max(hilo_w, round(font_sm.getlength(today_hi)))
+        hilo_w = max(hilo_w, round(font_md.getlength(today_hi)))
     if today_lo:
-        hilo_w = max(hilo_w, round(font_sm.getlength(today_lo)))
+        hilo_w = max(hilo_w, round(font_md.getlength(today_lo)))
     if today_precip:
         hilo_w = max(hilo_w, round(font_xs.getlength(today_precip)))
     budget = avail - hilo_w
@@ -428,6 +430,7 @@ def _build_weather_context(
     # from ``scale``.
     temp_font_sz = round(_WX_FONT_XL * scale)
     detail_font_sz = round(_WX_FONT_SM * scale)
+    hilo_font_sz = round(_WX_FONT_MD * scale)
     precip_font_sz = round(_WX_FONT_XS * scale)
     _, temp_weight = resolve_font(
         widget, "temp", temp_font_sz, FontWeight.BOLD
@@ -441,6 +444,7 @@ def _build_weather_context(
     # required so measured advance widths match the rendered glyphs.
     font_xl = _load_role_font(temp_font_sz, temp_weight)
     font_sm = _load_role_font(detail_font_sz, detail_weight)
+    font_md = _load_role_font(hilo_font_sz, detail_weight)
     font_xs = _load_role_font(precip_font_sz, precip_weight)
 
     # Entity attributes.
@@ -506,10 +510,14 @@ def _build_weather_context(
     pad = m.padding
     icon_right_pad = round(_WX_ICON_R_PAD * scale)
     detail_gap = round(_WX_DETAIL_GAP * scale)
+    detail_top_gap = round(_WX_DETAIL_TOP_GAP * scale)
+    hilo_gap = round(_WX_HILO_GAP * scale)
     detail_icon_h = round(_WX_DETAIL_ICON_H * scale)
     icon_gap = round(_WX_ICON_GAP * scale)
     sep_gap = round(_WX_SEP_GAP * scale)
-    sep_thickness = m.divider
+    # A 1 px hairline: thicker light-gray rules dither into a dotted
+    # band on e-ink panels.
+    sep_thickness = 1
     forecast_zone_h = round(_WX_FC_ZONE_H * scale)
     precip_text_h = round(_WX_PRECIP_H * scale)
     bar_height = round(_WX_BAR_H * scale)
@@ -555,7 +563,7 @@ def _build_weather_context(
     current_h = (
         top_pad
         + max(icon_size, temp_h)
-        + detail_gap
+        + detail_top_gap
         + detail_icon_h
         + feels_like_h
         + date_h
@@ -599,16 +607,11 @@ def _build_weather_context(
     # few pixels.
     temp_y = icon_cy
 
-    # vis_top: top of the visible temperature glyph, used as
-    # anchor for the stacked hi/lo/precip text block.
-    vis_top = icon_cy - temp_h // 2
     hilo_right = content_left + content_w - pad
 
     today_hi = ""
     today_lo = ""
     today_precip = ""
-    lo_y = vis_top + round(temp_h * _WX_LO_Y_FRAC)
-    precip_y = vis_top + round(temp_h * _WX_PRECIP_Y_FRAC)
     precip_unit_fc = attrs.get("precipitation_unit", "mm")
     if forecast:
         today = forecast[0]
@@ -619,14 +622,32 @@ def _build_weather_context(
             today_hi = f"{_fmt_temp(hi_val, nf, lang)}°"
         if lo_val is not None:
             today_lo = f"{_fmt_temp(lo_val, nf, lang)}°"
-        if p_val is not None:
+        # Like the forecast columns, a dry day shows no "0mm".
+        if p_val is not None and p_val > 0:
             today_precip = f"{_fmt(str(p_val), config)}{precip_unit_fc}"
+
+    # Stack hi, lo and precipitation as one block centred on the
+    # temperature row, so it reads as a companion to the big number
+    # rather than floating at the card's top edge.
+    hilo_lines = [
+        h
+        for h, text in (
+            (hilo_font_sz, today_hi),
+            (hilo_font_sz, today_lo),
+            (precip_font_sz, today_precip),
+        )
+        if text
+    ]
+    hilo_block_h = sum(hilo_lines) + hilo_gap * max(0, len(hilo_lines) - 1)
+    hi_y = icon_cy - hilo_block_h // 2
+    lo_y = hi_y + (hilo_font_sz + hilo_gap if today_hi else 0)
+    precip_y = lo_y + (hilo_font_sz + hilo_gap if today_lo else 0)
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
     font_xl_size = _cap_weather_font_xl(
         temp_font_sz,
         font_xl,
-        font_sm,
+        font_md,
         font_xs,
         temp_text,
         hilo_right - temp_x - pad,
@@ -653,7 +674,7 @@ def _build_weather_context(
         except (KeyError, FileNotFoundError):
             cond_icon_svg = ""
 
-        detail_y = row1_bottom + detail_gap
+        detail_y = row1_bottom + detail_top_gap
         detail_items = _build_detail_items(
             humidity,
             pressure,
@@ -760,6 +781,9 @@ def _build_weather_context(
 
     # Forecast grid.
     forecast_entries: list[dict[str, object]] = []
+    col_dividers: list[int] = []
+    col_div_y1 = 0
+    col_div_y2 = 0
     sep_x1 = 0
     sep_x2 = 0
     sep_y = 0
@@ -788,6 +812,19 @@ def _build_weather_context(
                 round(i * (forecast_cols - 1) / (forecast_days - 1))
                 for i in range(forecast_days)
             ]
+
+        # Hairlines midway between neighbouring drawn columns, from
+        # the day label down to the precipitation line, separate the
+        # days without boxing them in.
+        shown = col_positions[: len(forecast[:forecast_days])]
+        col_dividers = [
+            content_left + col_width * (a + b + 1) // 2
+            for a, b in pairwise(shown)
+        ]
+        col_div_y1 = forecast_y
+        col_div_y2 = forecast_y + round(
+            (_WX_FC_PRECIP_Y + _WX_FONT_XS) * scale
+        )
 
         for idx, day in enumerate(forecast[:forecast_days]):
             col_i = col_positions[idx]
@@ -859,6 +896,7 @@ def _build_weather_context(
         "temp_y": temp_y,
         "font_xl": font_xl_size,
         "font_sm": detail_font_sz,
+        "font_md": hilo_font_sz,
         # font_xs is template-only; no PIL measurement needed beyond
         # the weight-matched face used for the temp-width cap above.
         "font_xs": precip_font_sz,
@@ -867,7 +905,7 @@ def _build_weather_context(
         "precip_font_weight": _font_weight_svg(precip_weight),
         "hilo_right": hilo_right,
         "hi_text": today_hi,
-        "hi_y": vis_top,
+        "hi_y": hi_y,
         "lo_text": today_lo,
         "lo_y": lo_y,
         "precip_text": today_precip,
@@ -898,5 +936,8 @@ def _build_weather_context(
         "sep_y": sep_y,
         "sep_thickness": sep_thickness,
         "forecast_entries": forecast_entries,
+        "col_dividers": col_dividers,
+        "col_div_y1": col_div_y1,
+        "col_div_y2": col_div_y2,
         **_color_context(),
     }

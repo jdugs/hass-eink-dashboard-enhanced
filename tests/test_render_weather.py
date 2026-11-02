@@ -333,7 +333,8 @@ class TestRenderWeather:
         )
 
     def test_weather_compact_forecast_3_days(self) -> None:
-        # 3 days in a 5-column grid: columns 1 and 3 empty.
+        # 3 days in a 5-column grid: columns 1 and 3 hold no text,
+        # only the light-gray hairline dividing their neighbours.
         widgets = [
             {
                 "type": "weather",
@@ -349,8 +350,8 @@ class TestRenderWeather:
         # n_cols=5, col_width = 356 // 5 = 71.
         # Col 1 spans [95, 166], col 3 spans [237, 308].
         # Forecast starts at ~y=154.
-        assert_all_white(img, 105, 160, 155, 260)
-        assert_all_white(img, 250, 160, 295, 260)
+        for box in ((105, 160, 155, 260), (250, 160, 295, 260)):
+            assert img.crop(box).getextrema()[0] >= COLOR_LIGHT_GRAY
         # Filled column 0 should have content.
         assert_has_dark_pixels(
             img,
@@ -470,12 +471,12 @@ class TestRenderWeather:
         total_h = (
             m.padding
             + round(80 * s)  # row1_h
-            + round(2 * s)
+            + round(12 * s)  # detail_top_gap
             + round(20 * s)  # detail_h
-            + round(8 * s)  # sep_gap
-            + max(2, round(3 * s))  # sep_thickness
-            + round(8 * s)  # sep_gap after separator
-            + round(88 * s)  # forecast_zone_h
+            + round(14 * s)  # sep_gap
+            + 1  # sep_thickness: always a 1 px hairline
+            + round(14 * s)  # sep_gap after separator
+            + round(112 * s)  # forecast_zone_h
             + round(16 * s)  # precip_text_h
             + pad  # bottom pad
         )
@@ -619,8 +620,8 @@ class TestRenderWeather:
         pad = round(10 * s)
         total_h = (
             m.padding  # current_h in forecast mode
-            + round(8 * s)  # sep_gap (no divider line in this mode)
-            + round(88 * s)  # forecast_zone_h
+            + round(14 * s)  # sep_gap (no divider line in this mode)
+            + round(112 * s)  # forecast_zone_h
             + round(16 * s)  # precip_text_h
             + pad  # bottom pad
         )
@@ -1022,22 +1023,57 @@ class TestRenderWeather:
         )
         assert 'font-weight="bold"' in _text_element(svg, "24°")
 
+    def _rainy_today_config(self) -> dict[str, object]:
+        """Build a config whose first forecast day has 5 mm of rain."""
+        state = MOCK_WEATHER_STATE["weather.home"]
+        forecast = state["attributes"]["forecast"]
+        rainy = {
+            "weather.home": {
+                **state,
+                "attributes": {
+                    **state["attributes"],
+                    "forecast": [
+                        {**forecast[0], "precipitation": 5},
+                        *forecast[1:],
+                    ],
+                },
+            }
+        }
+        return self._config(states=rainy)
+
     def test_weather_fonts_precip_weight_bold(self) -> None:
         # fonts.precip.weight="bold" drives the font_xs texts, here
         # today's precipitation.
         svg = render_widget_svg(
             self._font_widget(fonts={"precip": {"weight": "bold"}}),
-            self._config(),
+            self._rainy_today_config(),
         )
-        assert 'font-weight="bold"' in _text_element(svg, "0mm")
+        assert 'font-weight="bold"' in _text_element(svg, "5mm")
 
     def test_weather_default_detail_and_precip_are_regular(self) -> None:
         # Detail and precip default to regular weight; the
         # temperature stays the only bold text on the card.
-        svg = render_widget_svg(self._font_widget(), self._config())
+        svg = render_widget_svg(
+            self._font_widget(), self._rainy_today_config()
+        )
         assert svg.count('font-weight="bold"') == 1
         assert 'font-weight="400"' in _text_element(svg, "24°")
-        assert 'font-weight="400"' in _text_element(svg, "0mm")
+        assert 'font-weight="400"' in _text_element(svg, "5mm")
+
+    def test_weather_dry_today_hides_precipitation(self) -> None:
+        # A dry day shows no "0mm" next to the temperature, matching
+        # the forecast columns, which only list rainy days.
+        svg = render_widget_svg(self._font_widget(), self._config())
+        assert ">0mm<" not in svg
+
+    def test_weather_forecast_columns_split_by_hairlines(self) -> None:
+        # Neighbouring forecast days are separated by 1 px divider
+        # lines; with the main separator that makes one line per day.
+        w = {"type": "weather", "entity": "weather.home", "x": 0, "y": 0}
+        svg = render_widget_svg({**w, "forecast_days": 3}, self._config())
+        dividers = re.findall(r'<line class="eink-divider"[^>]*>', svg)
+        assert len(dividers) == 3
+        assert all('stroke-width="1"' in d for d in dividers)
 
     def test_weather_fonts_size_override_ignored(self) -> None:
         # Weather geometry is coupled to font_size, so the roles
