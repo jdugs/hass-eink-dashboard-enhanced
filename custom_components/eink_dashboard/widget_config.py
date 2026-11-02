@@ -551,6 +551,8 @@ class CalendarWidget(WidgetBase, ListFields, total=False):
     """Days of events to fetch."""
     hide_icon: bool
     """Suppress the row icons."""
+    show_location: bool
+    """Show each event's location under its summary."""
 
 
 class WeekCalendarWidget(WidgetBase, total=False):

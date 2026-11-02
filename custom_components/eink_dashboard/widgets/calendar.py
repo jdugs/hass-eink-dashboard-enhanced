@@ -49,6 +49,27 @@ if TYPE_CHECKING:
     from ..widget_config import CalendarWidget
 
 
+def _event_location(event: dict[str, object]) -> str:
+    """Return an event's location collapsed onto a single line.
+
+    CalDAV and Google locations often hold a multi-line postal
+    address; the row has room for one line, so the lines are joined
+    with ", " (dropping any trailing comma already on a line) and
+    runs of whitespace become single spaces.
+
+    Args:
+        event: Event dict from ``calendar.get_events``.
+
+    Returns:
+        The normalised location, or ``""`` when absent or blank.
+    """
+    lines = (
+        " ".join(line.split()).rstrip(",")
+        for line in str(event.get("location") or "").splitlines()
+    )
+    return ", ".join(line for line in lines if line)
+
+
 def _build_calendar_context(
     widget: CalendarWidget,
     config: DisplayConfig,
@@ -92,6 +113,8 @@ def _build_calendar_context(
             density; also the per-row size when ``h`` is omitted),
             ``hide_icon`` (omit the icon circles; text starts at
             the left padding; default ``False``),
+            ``show_location`` (show the event location as a
+            secondary line under the summary; default ``False``),
             ``divider_width`` (fixed divider stroke in px; ``0``
             hides dividers; default 1),
             ``card_style`` (``"border"``, ``"left_bar"``,
@@ -124,6 +147,7 @@ def _build_calendar_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
     hide_icon: bool = bool(widget.get("hide_icon", False))
+    show_location: bool = bool(widget.get("show_location", False))
     max_row_h = _max_row_height(widget, config)
     time_format: str = config.get("time_format", "24")
     language: str = config.get("language", "en")
@@ -253,6 +277,9 @@ def _build_calendar_context(
                 CardRow(
                     y=content_y + i * row_h,
                     primary=summary,
+                    secondary=(
+                        _event_location(event) if show_location else ""
+                    ),
                     value=label,
                     icon_svg=icon_svg,
                     icon_outline=use_outline,

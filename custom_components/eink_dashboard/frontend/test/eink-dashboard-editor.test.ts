@@ -150,6 +150,13 @@ describe("SCHEMAS", () => {
     }
   });
 
+  it("calendar has a show_location toggle, off by default", () => {
+    // Location rows are opt-in so existing layouts stay unchanged.
+    const field = findField(SCHEMAS.calendar(DISPLAY), "show_location");
+    expect(field?.selector).toEqual({ boolean: {} });
+    expect(field?.default).toBe(false);
+  });
+
   it("weather entity field uses domain filter 'weather'", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const entityField = findField(schema, "entity");

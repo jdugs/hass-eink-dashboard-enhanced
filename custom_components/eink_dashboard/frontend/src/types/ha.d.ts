@@ -560,6 +560,12 @@ export interface CalendarWidget extends WidgetBase {
    * row text at the left padding.  Default: false.
    */
   hide_icon?: boolean;
+  /**
+   * When true, shows each event's location (collapsed to one line)
+   * in gray under its summary.  Events without a location keep a
+   * single-line row.  Default: false.
+   */
+  show_location?: boolean;
 }
 
 /**

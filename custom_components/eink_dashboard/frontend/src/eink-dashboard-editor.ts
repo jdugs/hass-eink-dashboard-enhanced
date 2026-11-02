@@ -1476,6 +1476,11 @@ export const SCHEMAS: Record<
             number: { min: 1, max: 30, mode: "box" },
           },
         },
+        {
+          name: "show_location",
+          default: false,
+          selector: { boolean: {} },
+        },
       ],
     },
     {
@@ -2086,6 +2091,7 @@ export const LABELS: Record<string, string> = {
   name: "Name",
   icon: "Icon",
   hide_icon: "Hide icon",
+  show_location: "Show location",
   hide_name: "Hide name",
   hide_state: "Hide state",
   state_content: "State attribute",

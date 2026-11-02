@@ -145,6 +145,21 @@ MOCK_CALENDAR_STATES: dict[str, Any] = {
             ],
         },
     },
+    "calendar.located": {
+        "state": "off",
+        "attributes": {
+            "friendly_name": "Located Calendar",
+            "events": [
+                {
+                    "start": "2026-06-15T09:30:00",
+                    "end": "2026-06-15T10:00:00",
+                    "summary": "Dentist",
+                    "location": "Smile Dental\n  12 Elm St\n",
+                    "all_day": False,
+                },
+            ],
+        },
+    },
 }
 
 
@@ -1058,3 +1073,39 @@ class TestRenderCalendar:
         assert (bbox_scaled[3] - bbox_scaled[1]) > (
             bbox_default[3] - bbox_default[1]
         )
+
+    def test_calendar_show_location_adds_secondary_line(self) -> None:
+        # show_location renders the location, collapsed onto one
+        # line, as a gray secondary text under the summary.
+        w = self._widget(
+            entity="calendar.located", h=DEFAULT_ROW_H, show_location=True
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        texts = re.findall(r'<text\s[^>]*y="(\d+)"[^>]*>([^<]*)<', svg)
+        by_text = {t: int(y) for y, t in texts}
+        assert "Smile Dental, 12 Elm St" in by_text
+        assert by_text["Dentist"] < by_text["Smile Dental, 12 Elm St"]
+        gray = color_to_hex(COLOR_GRAY)
+        assert re.search(rf'fill="{gray}">Smile Dental, 12 Elm St<', svg)
+
+    def test_calendar_location_hidden_by_default(self) -> None:
+        # Without show_location the location never reaches the SVG.
+        w = self._widget(entity="calendar.located", h=DEFAULT_ROW_H)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert "Smile Dental" not in svg
+
+    def test_calendar_show_location_without_location(self) -> None:
+        # Events without a location render exactly as when the
+        # option is off: a single centred summary line.
+        w = self._widget(entity="calendar.future_only", h=DEFAULT_ROW_H)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            plain = render_widget_svg(w, self._config())
+            located = render_widget_svg(
+                {**w, "show_location": True}, self._config()
+            )
+        assert plain == located
